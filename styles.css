@@ -1,0 +1,214 @@
+/* =========== GLOBAL =========== */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background: #F8F8F8;
+  color: #2E2E2E;
+}
+
+/* =========== LANGUAGE BUTTONS =========== */
+.lang-select {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.lang-btn {
+  padding: 8px 14px;
+  background: white;
+  border: 1px solid #DADADA;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 14px;
+  color: #2E2E2E;
+}
+
+.lang-btn.active {
+  background: #70C39F;
+  color: white;
+  border-color: #70C39F;
+}
+
+.lang-btn:hover {
+  background: #E0EFEA;
+}
+
+/* =========== TITLES =========== */
+.section-title {
+  margin: 20px 0 10px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #2E2E2E;
+}
+
+/* =========== DATE LIST =========== */
+.date-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.date-pill {
+  padding: 10px 14px;
+  background: white;
+  border-radius: 20px;
+  border: 1px solid #DADADA;
+  cursor: pointer;
+  font-size: 14px;
+  transition: 0.2s;
+  color: #2E2E2E;
+}
+
+.date-pill:hover {
+  background: #E0EFEA;
+}
+
+.date-pill.selected {
+  background: #70C39F;
+  color: white;
+  border-color: #70C39F;
+}
+
+/* =========== TIME SLOTS =========== */
+.slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.slot {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #DADADA;
+  background: white;
+  cursor: pointer;
+  transition: 0.2s;
+  font-size: 14px;
+  color: #2E2E2E;
+}
+
+.slot:hover {
+  background: #E0EFEA;
+}
+
+/* Booked Slot */
+.slot.booked {
+  background: #F5C8DA;
+  border-color: #E96AA3;
+  color: #8A5A74;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+/* Selected Slot */
+.slot.selected {
+  background: #E96AA3;
+  color: white;
+  border-color: #E96AA3;
+}
+
+/* =========== SUMMARY =========== */
+.summary {
+  margin-top: 20px;
+  font-size: 16px;
+}
+
+/* =========== CONFIRM BUTTON =========== */
+.confirm-btn {
+  margin-top: 20px;
+  padding: 12px;
+  width: 100%;
+  max-width: 350px;
+  font-size: 16px;
+  font-weight: bold;
+  background: #70C39F;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: block;
+  transition: 0.2s;
+}
+
+.confirm-btn:hover {
+  background: #5AB18C;
+}
+
+/* =========== POPUP =========== */
+.popup {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.hidden {
+  display: none;
+}
+
+.popup-content {
+  background: white;
+  padding: 25px;
+  width: 320px;
+  border-radius: 10px;
+  border: 1px solid #DADADA;
+  animation: popupFade 0.25s ease-out;
+}
+
+@keyframes popupFade {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.popup-content input {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 6px;
+  border: 1px solid #DADADA;
+  font-size: 14px;
+}
+
+.submit-btn,
+.close-popup {
+  width: 100%;
+  padding: 12px;
+  margin-top: 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  transition: 0.2s;
+}
+
+/* Submit Button */
+.submit-btn {
+  background: #70C39F;
+  color: white;
+}
+
+.submit-btn:hover {
+  background: #5AB18C;
+}
+
+/* Close Button */
+.close-popup {
+  background: #E96AA3;
+  color: white;
+}
+
+.close-popup:hover {
+  background: #D7588E;
+}
+
+.popup-date {
+  margin-bottom: 10px;
+  font-size: 15px;
+  opacity: 0.7;
+}

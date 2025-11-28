@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Selfie Studio Booking</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+
+  <!-- LANGUAGE SWITCH -->
+  <div class="lang-select">
+    <button class="lang-btn" data-lang="ru">Русский</button>
+    <button class="lang-btn" data-lang="hy">Հայերեն</button>
+  </div>
+
+  <!-- DATE LIST -->
+  <h2 class="section-title">Дата / Օր</h2>
+  <div id="date-list" class="date-list"></div>
+
+  <!-- TIME SLOTS -->
+  <h2 class="section-title">Время / Ժամ</h2>
+  <div id="slot-grid" class="slot-grid"></div>
+
+  <!-- SUMMARY -->
+  <div id="summary" class="summary"></div>
+
+  <!-- CONFIRM BUTTON -->
+  <button id="confirm-btn" class="confirm-btn">
+    Далее / Շարունակել
+  </button>
+
+  <!-- POPUP FORM -->
+  <div id="popup" class="popup hidden">
+    <div class="popup-content">
+
+      <h2 id="popup-title"></h2>
+      <p id="popup-date" class="popup-date"></p>
+
+      <input id="user-name" type="text" placeholder="">
+      <input id="user-phone" type="text" placeholder="">
+
+      <button id="submit-btn" class="submit-btn"></button>
+      <button id="close-popup" class="close-popup"></button>
+
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
