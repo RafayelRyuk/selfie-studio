@@ -212,3 +212,13 @@ body {
   font-size: 15px;
   opacity: 0.7;
 }
+
+.slot.selected {
+  border: 2px solid #2d8cff;
+}
+
+.slot.mine {
+  background-color: #2d8cff;
+  color: #fff;
+}
+
