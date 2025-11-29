@@ -342,36 +342,50 @@ async function initSlotsForDay() {
   const today = new Date();
   const sel = new Date(selectedDate);
 
-  // block past hours for TODAY as non-cancelable booked
+  // ✅ HIDE passed hours fully (not “booked”)
   if (isSameDay(today, sel)) {
-    base = base.map(s =>
-      isPastSlot(selectedDate, s.start) ? { ...s, status:"booked" } : s
-    );
+    base = base.filter(s => !isPastSlot(selectedDate, s.start));
   }
 
-  // load booked slots from backend
-  try {
-    const res = await fetch(`${API_URL}/slots/${dateKey}`);
-    const data = await res.json();
-    const globalBooked = data.booked || [];
+  // ============================================
+  // 1) LOAD global booked slots (from backend)
+  // ============================================
+  let globalBooked = [];
+  let personalBooked = [];
 
-    slots = applyBookedSlots(base, globalBooked);
+  try {
+    const res = await fetch(`${API_URL}/slots/${dateKey}?user_id=${USER_ID}`);
+    const data = await res.json();
+
+    globalBooked = data.booked || [];    // others' bookings
+    personalBooked = data.personal || []; // my own slots from DB
+
   } catch (e) {
     console.error("Error loading booked slots", e);
-    slots = base;
   }
 
-  // mark MY own slots for this date (only current session)
-  const myForDay = myBookedByDate[dateKey] || [];
-  if (myForDay.length) {
-    slots = slots.map(s =>
-      myForDay.includes(s.start) && !isPastSlot(selectedDate, s.start)
-        ? { ...s, status: "mine" }
-        : s
-    );
+  // 2) FIRST apply global bookings
+  slots = applyBookedSlots(base, globalBooked);
+
+  // 3) THEN override with MY personal bookings (mine must win)
+  slots = slots.map(s =>
+    personalBooked.includes(s.start)
+      ? { ...s, status: "mine" }
+      : s
+  );
+
+  // 4) Disable NEXT if user already has 2 reserved slots
+  const myCount = slots.filter(s => s.status === "mine").length;
+  if (myCount >= 2) {
+    confirmBtn.textContent =
+      currentLang === "ru" ? "Спасибо ✔" : "Շնորհակալություն ✔";
+    confirmBtn.disabled = true;
+  } else {
+    confirmBtn.textContent = "Далее / Շարունակել";
+    confirmBtn.disabled = false;
   }
 
-  updateConfirmButtonState();
+  // 5) reset temporary selections
   selectedSlots = [];
   renderSlots();
   updateStatusText();
