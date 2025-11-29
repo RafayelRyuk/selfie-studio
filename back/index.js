@@ -13,13 +13,26 @@ app.use(express.json());
 // Return booked slots for a specific date
 app.get("/slots/:date", (req, res) => {
   const date = req.params.date;
+  const user_id = req.query.user_id;
 
+  // Get all booked slots (for blocking others)
   db.all(
-    "SELECT start FROM reservations WHERE date = ?",
+    "SELECT start, user_id FROM reservations WHERE date = ?",
     [date],
     (err, rows) => {
-      if (err) return res.json({ booked: [] });
-      res.json({ booked: rows.map(r => r.start) });
+      if (err) return res.json({ booked: [], personal: [] });
+      
+      const allBooked = rows.map(r => r.start);
+      
+      // Get personal bookings (only for the requesting user)
+      const personal = rows
+        .filter(r => r.user_id === user_id)
+        .map(r => r.start);
+      
+      res.json({ 
+        booked: allBooked,
+        personal: personal 
+      });
     }
   );
 });
@@ -42,14 +55,34 @@ app.post("/cancel", (req, res) => {
 app.post("/reserve", (req, res) => {
   const { date, slots, name, phone, user_id } = req.body;
 
-  slots.forEach(slot => {
+  if (!date || !slots || !Array.isArray(slots) || slots.length === 0) {
+    return res.status(400).json({ success: false, error: "Invalid request data" });
+  }
+
+  let completed = 0;
+  let hasError = false;
+
+  slots.forEach((slot) => {
     db.run(
       "INSERT INTO reservations (date, start, end, name, phone, user_id) VALUES (?, ?, ?, ?, ?, ?)",
-      [date, slot.start, slot.end, name, phone, user_id]
+      [date, slot.start, slot.end, name, phone, user_id],
+      function (err) {
+        if (err) {
+          console.error("Error saving reservation:", err);
+          hasError = true;
+        }
+        completed++;
+        
+        // Send response after all operations complete
+        if (completed === slots.length) {
+          if (hasError) {
+            return res.status(500).json({ success: false, error: "Failed to save some reservations" });
+          }
+          res.json({ success: true });
+        }
+      }
     );
   });
-
-  res.json({ success: true });
 });
 
 app.listen(3000, () => console.log("API running on port 3000"));
