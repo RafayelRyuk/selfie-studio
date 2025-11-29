@@ -185,6 +185,9 @@ function toggleSlotSelection(slot) {
   // Cannot select other people's reservations
 if (slot.status === "booked") return slot;
 
+// Cannot select my own already-booked slot
+
+
 // Cannot select my own (mine) — those are cancelable only
 if (slot.status === "mine") return slot;
 
@@ -194,6 +197,13 @@ if (slot.status === "mine") return slot;
     selectedSlots = selectedSlots.filter(s => s.start !== slot.start);
     return { ...slot, status: "free" };
   }
+// Prevent booking more than 2 total (mine + selected)
+const myCount = slots.filter(s => s.status === "mine").length;
+
+if (myCount + selectedSlots.length >= MAX_SELECTION) {
+  alert(LANG[currentLang].alertSelect);
+  return slot;
+}
 
   if (selectedSlots.length >= MAX_SELECTION) {
     alert(LANG[currentLang].alertSelect);
@@ -216,28 +226,18 @@ function renderSlots() {
     btn.addEventListener("click", async () => {
 
       // BOOKED SLOT CLICK → CANCEL
-      if (slot.status === "booked") {
-        if (confirm(LANG[currentLang].cancelQuestion)) {
-          try {
-            await fetch(`${API_URL}/cancel`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                date: selectedDate.toISOString().split("T")[0],
-                start: slot.start,
-                user_id: "web-user"
-              })
-            });
-            slots = slots.map(s => s.start === slot.start ? { ...s, status:"free" } : s);
-            renderSlots();
-            alert(LANG[currentLang].cancelDone);
-          } catch(e) {
-            console.error(e);
-          }
-        }
-        return;
-      }
+  // Cannot cancel other people's reservations
+if (slot.status === "booked") {
+  return; 
+}
+
       // MY OWN SLOT CLICK → CANCEL
+// Cannot cancel other people's reservations
+if (slot.status === "booked") {
+  return; 
+}
+
+// MY OWN SLOT CLICK → CANCEL
 if (slot.status === "mine") {
   const ask = LANG[currentLang].cancelQuestion;
 
@@ -255,7 +255,6 @@ if (slot.status === "mine") {
         }),
       });
 
-      // free the slot in UI
       slots = slots.map(s =>
         s.start === slot.start ? { ...s, status: "free" } : s
       );
@@ -263,7 +262,6 @@ if (slot.status === "mine") {
       renderSlots();
       alert(LANG[currentLang].cancelDone);
 
-      // re-enable NEXT button
       confirmBtn.textContent = "Далее / Շարունակել";
       confirmBtn.disabled = false;
 
@@ -273,6 +271,7 @@ if (slot.status === "mine") {
   }
   return;
 }
+
 
 
       // NEXT-DAY BLOCK
@@ -322,6 +321,17 @@ slots = slots.map(s =>
     ? { ...s, status: "mine" }
     : s
 );
+    // Disable NEXT if user already booked 2 slots
+const myCount = slots.filter(s => s.status === "mine").length;
+
+if (myCount >= 2) {
+  confirmBtn.textContent = currentLang === "ru" ? "Спасибо ✔" : "Շնորհակալություն ✔";
+  confirmBtn.disabled = true;
+} else {
+  confirmBtn.textContent = "Далее / Շարունակել";
+  confirmBtn.disabled = false;
+}
+
 
   } catch {
     slots = base;
@@ -380,8 +390,16 @@ popupSubmit.addEventListener("click", async () => {
   }
 
   popup.classList.add("hidden");
+ const myCount = slots.filter(s => s.status === "mine").length;
+
+if (myCount >= 2) {
   confirmBtn.textContent = LANG[currentLang].thanks;
   confirmBtn.disabled = true;
+} else {
+  confirmBtn.textContent = "Далее / Շարունակել";
+  confirmBtn.disabled = false;
+}
+
 
   selectedSlots.forEach(s => {
     slots = slots.map(sl => sl.start === s.start ? { ...sl, status:"mine" } : sl);
