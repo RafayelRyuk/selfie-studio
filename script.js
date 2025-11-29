@@ -182,6 +182,12 @@ function isNextDayBlocked(date) {
 
 // ============ TOGGLE ============
 function toggleSlotSelection(slot) {
+  // Cannot select other people's reservations
+if (slot.status === "booked") return slot;
+
+// Cannot select my own (mine) — those are cancelable only
+if (slot.status === "mine") return slot;
+
   const exists = selectedSlots.find(s => s.start === slot.start);
 
   if (exists) {
@@ -231,6 +237,43 @@ function renderSlots() {
         }
         return;
       }
+      // MY OWN SLOT CLICK → CANCEL
+if (slot.status === "mine") {
+  const ask = LANG[currentLang].cancelQuestion;
+
+  if (confirm(ask)) {
+    const dateString = selectedDate.toISOString().split("T")[0];
+
+    try {
+      await fetch(`${API_URL}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateString,
+          start: slot.start,
+          user_id: USER_ID
+        }),
+      });
+
+      // free the slot in UI
+      slots = slots.map(s =>
+        s.start === slot.start ? { ...s, status: "free" } : s
+      );
+
+      renderSlots();
+      alert(LANG[currentLang].cancelDone);
+
+      // re-enable NEXT button
+      confirmBtn.textContent = "Далее / Շարունակել";
+      confirmBtn.disabled = false;
+
+    } catch(err) {
+      console.error(err);
+    }
+  }
+  return;
+}
+
 
       // NEXT-DAY BLOCK
       if (isNextDayBlocked(selectedDate)) {
@@ -341,7 +384,7 @@ popupSubmit.addEventListener("click", async () => {
   confirmBtn.disabled = true;
 
   selectedSlots.forEach(s => {
-    slots = slots.map(sl => sl.start === s.start ? { ...sl, status:"booked" } : sl);
+    slots = slots.map(sl => sl.start === s.start ? { ...sl, status:"mine" } : sl);
   });
 
   renderSlots();
