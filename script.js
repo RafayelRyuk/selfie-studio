@@ -1,3 +1,5 @@
+
+
 // ========== SETTINGS ==========
 const OPEN_HOUR = 10;
 const CLOSE_HOUR = 22;
@@ -9,6 +11,14 @@ let currentLang = "ru";
 let selectedDate = null;
 let selectedSlots = [];
 let slots = [];
+// Get Telegram user ID
+let USER_ID = "web-user";
+
+if (window.Telegram && Telegram.WebApp) {
+  Telegram.WebApp.ready();
+  USER_ID = Telegram.WebApp.initDataUnsafe?.user?.id || "web-user";
+}
+
 
 // ======= BACKEND API URL ========
 const API_URL = "http://localhost:3000";
@@ -254,9 +264,22 @@ async function initSlotsForDay() {
   }
 
   try {
-    const res = await fetch(`${API_URL}/slots/${dateString}`);
-    const data = await res.json();
-    slots = applyBookedSlots(base, data.booked || []);
+    const res = await fetch(`${API_URL}/slots/${dateString}?user_id=${USER_ID}`);
+const data = await res.json();
+
+const globalBooked = data.booked || [];
+const personal = data.personal || [];
+
+// Mark globally booked slots (others)
+slots = applyBookedSlots(base, globalBooked);
+
+// Mark user's own slots
+slots = slots.map(s =>
+  personal.includes(s.start)
+    ? { ...s, status: "mine" }
+    : s
+);
+
   } catch {
     slots = base;
   }
