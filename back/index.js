@@ -20,7 +20,12 @@ app.use(express.json());
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`, {
     query: req.query,
-    body: req.body ? Object.keys(req.body) : 'no body'
+    body: req.body ? Object.keys(req.body) : 'no body',
+    headers: {
+      'ngrok-skip-browser-warning': req.headers['ngrok-skip-browser-warning'],
+      'origin': req.headers.origin,
+      'user-agent': req.headers['user-agent']?.substring(0, 50)
+    }
   });
   next();
 });
