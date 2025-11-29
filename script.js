@@ -1,42 +1,42 @@
-
-
 // ========== SETTINGS ==========
 const OPEN_HOUR = 10;
 const CLOSE_HOUR = 22;
 const SLOT_MINUTES = 30;
-const MAX_SELECTION = 2;
+const MAX_SELECTION = 2;    // max 2 slots PER DAY (total)
 const MAX_DAYS_AHEAD = 14;
 
 let currentLang = "ru";
 let selectedDate = null;
-let selectedSlots = [];
-let slots = [];
-// Get Telegram user ID
-let USER_ID = "web-user";
+let selectedSlots = [];   // in-progress selection
+let slots = [];           // all slots of selected day
 
+// Track MY own bookings during current session (per date)
+const myBookedByDate = {}; // { "2025-03-01": ["10:00","10:30"] }
+
+// Telegram user ID (for backend, future)
+let USER_ID = "web-user";
 if (window.Telegram && Telegram.WebApp) {
   Telegram.WebApp.ready();
   USER_ID = Telegram.WebApp.initDataUnsafe?.user?.id || "web-user";
 }
 
-
 // ======= BACKEND API URL ========
 const API_URL = "http://localhost:3000";
 
 // ======= UI ELEMENTS ========
-const dateListEl = document.getElementById("date-list");
-const slotGridEl = document.getElementById("slot-grid");
-const confirmBtn = document.getElementById("confirm-btn");
-const summaryEl = document.getElementById("summary");
+const dateListEl   = document.getElementById("date-list");
+const slotGridEl   = document.getElementById("slot-grid");
+const confirmBtn   = document.getElementById("confirm-btn");
+const summaryEl    = document.getElementById("summary");
 
-// POPUP
-const popup = document.getElementById("popup");
-const popupTitle = document.getElementById("popup-title");
-const popupDate = document.getElementById("popup-date");
-const nameInput = document.getElementById("user-name");
-const phoneInput = document.getElementById("user-phone");
-const popupSubmit = document.getElementById("submit-btn");
-const popupClose = document.getElementById("close-popup");
+// POPUP ELEMENTS
+const popup        = document.getElementById("popup");
+const popupTitle   = document.getElementById("popup-title");
+const popupDate    = document.getElementById("popup-date");
+const nameInput    = document.getElementById("user-name");
+const phoneInput   = document.getElementById("user-phone");
+const popupSubmit  = document.getElementById("submit-btn");
+const popupClose   = document.getElementById("close-popup");
 
 // ======= LANG BUTTONS ========
 document.querySelectorAll(".lang-btn").forEach(btn => {
@@ -49,7 +49,6 @@ document.querySelectorAll(".lang-btn").forEach(btn => {
     renderSummary();
   });
 });
-
 document.querySelector('.lang-btn[data-lang="ru"]').classList.add("active");
 
 // ======= LANG DATA ========
@@ -60,12 +59,13 @@ const LANG = {
     phonePlaceholder: "Ваш телефон",
     submit: "Отправить",
     close: "Отмена",
-    alertSelect: "Вы можете выбрать максимум 2 слота.",
+    alertSelect: "Вы можете выбрать максимум 2 слота на этот день.",
     confirmError: "Выберите дату и хотя бы один слот.",
-    thanks: "Спасибо! Бронирование сохранено.",
-    cancelQuestion: "Отменить бронирование?",
-    cancelDone: "Бронирование отменено.",
-    afterBooking: "Если хотите отменить — нажмите на выделенный слот.",
+    thanksOne: "Спасибо! Ждём вас в выбранное время.",
+    thanksTwo: "Спасибо! Ждём вас совсем скоро 🙌",
+    cancelQuestion: "Отменить своё бронирование?",
+    cancelDone: "Ваше бронирование отменено.",
+    tooLateCancel: "Нельзя отменить бронь по прошедшему времени.",
     formatDate: (date) =>
       date.toLocaleDateString("ru-RU", { weekday: "long", month: "long", day: "numeric" }),
   },
@@ -75,21 +75,35 @@ const LANG = {
     phonePlaceholder: "Ձեր հեռախոսահամարը",
     submit: "Ուղարկել",
     close: "Փակել",
-    alertSelect: "Կարելի է ընտրել առավելագույնը 2 սլոթ։",
+    alertSelect: "Օրվա համար կարելի է ընտրել առավելագույնը 2 սլոթ։",
     confirmError: "Ընտրեք օրը և գոնե 1 սլոթ։",
-    thanks: "Շնորհակալություն։ Ամրագրումը պահպանված է։",
-    cancelQuestion: "Չեղարկե՞լ ամրագրված սլոթը։",
-    cancelDone: "Ամրագրվածը չեղարկվեց։",
-    afterBooking: "Եթե ցանկանում եք չեղարկել՝ սեղմեք սլոթի վրա։",
+    thanksOne: "Շնորհակալություն, սպասում ենք ձեզ ամրագրված ժամին։",
+    thanksTwo: "Շնորհակալություն, շուտով կտեսնվենք 🙌",
+    cancelQuestion: "Չեղարկե՞լ ձեր ամրագրումը։",
+    cancelDone: "Ձեր ամրագրումը չեղարկվեց։",
+    tooLateCancel: "Անհնար է չեղարկել արդեն անցած ժամի ամրագրումը։",
     formatDate: (date) =>
       date.toLocaleDateString("hy-AM", { weekday: "long", month: "long", day: "numeric" }),
   },
 };
 
+// ========= HELPERS ==========
+function getDateKey(date) {
+  return date.toISOString().split("T")[0];
+}
+
+function totalReservedCount() {
+  // all taken slots this day (past+others+mine)
+  return slots.filter(s => s.status === "booked" || s.status === "mine").length;
+}
+
+function myReservedCount() {
+  return slots.filter(s => s.status === "mine").length;
+}
+
 // ======= DATE FUNCTIONS ========
 function getAvailableDates() {
   let arr = [];
-
   const now = new Date();
   const today = new Date();
   today.setHours(0,0,0,0);
@@ -101,7 +115,6 @@ function getAvailableDates() {
     d.setDate(d.getDate() + i);
     arr.push(d);
   }
-
   return arr;
 }
 
@@ -124,7 +137,6 @@ function renderDates() {
 
     const day = d.getDate();
     const month = d.toLocaleString(currentLang === "ru" ? "ru-RU" : "hy-AM", { month: "short" });
-
     div.textContent = `${day} ${month}`;
 
     div.addEventListener("click", () => {
@@ -133,8 +145,6 @@ function renderDates() {
       renderDates();
       initSlotsForDay();
       renderSummary();
-      confirmBtn.textContent = "Далее / Շարունակել";
-      confirmBtn.disabled = false;
     });
 
     dateListEl.appendChild(div);
@@ -180,37 +190,70 @@ function isNextDayBlocked(date) {
   return selected.getTime() === tomorrow.getTime() && now.getHours() >= 22;
 }
 
+// ========= SUMMARY / STATUS TEXT =========
+function updateStatusText() {
+  const mineCount = myReservedCount();
+
+  if (selectedSlots.length > 0) {
+    // show in-progress selection
+    summaryEl.textContent = selectedSlots
+      .map(s => `${s.start}-${s.end}`)
+      .join(", ");
+    return;
+  }
+
+  if (mineCount === 0) {
+    summaryEl.textContent = "";
+  } else if (mineCount === 1) {
+    summaryEl.textContent = currentLang === "ru"
+      ? LANG.ru.thanksOne
+      : LANG.hy.thanksOne;
+  } else {
+    summaryEl.textContent = currentLang === "ru"
+      ? LANG.ru.thanksTwo
+      : LANG.hy.thanksTwo;
+  }
+}
+
+function updateConfirmButtonState() {
+  const reserved = totalReservedCount();
+  if (reserved >= MAX_SELECTION) {
+    confirmBtn.textContent = currentLang === "ru"
+      ? "Спасибо ✔"
+      : "Շնորհակալություն ✔";
+    confirmBtn.disabled = true;
+  } else {
+    confirmBtn.textContent = "Далее / Շարունակել";
+    confirmBtn.disabled = false;
+  }
+}
+
 // ============ TOGGLE ============
 function toggleSlotSelection(slot) {
-  // Cannot select other people's reservations
-if (slot.status === "booked") return slot;
-
-// Cannot select my own already-booked slot
-
-
-// Cannot select my own (mine) — those are cancelable only
-if (slot.status === "mine") return slot;
+  // can't select blocked/other or already mine
+  if (slot.status === "booked" || slot.status === "mine") return slot;
 
   const exists = selectedSlots.find(s => s.start === slot.start);
 
   if (exists) {
+    // unselect
     selectedSlots = selectedSlots.filter(s => s.start !== slot.start);
     return { ...slot, status: "free" };
   }
-// Prevent booking more than 2 total (mine + selected)
-const myCount = slots.filter(s => s.status === "mine").length;
 
-if (myCount + selectedSlots.length >= MAX_SELECTION) {
-  alert(LANG[currentLang].alertSelect);
-  return slot;
-}
+  // total reserved this day (mine+others) + in-progress selection
+  const reserved = totalReservedCount();
+  if (reserved + selectedSlots.length >= MAX_SELECTION) {
+    alert(LANG[currentLang].alertSelect);
+    return slot;
+  }
 
   if (selectedSlots.length >= MAX_SELECTION) {
     alert(LANG[currentLang].alertSelect);
     return slot;
   }
 
-  selectedSlots.push(slot);
+  selectedSlots.push({ start: slot.start, end: slot.end });
   return { ...slot, status: "selected" };
 }
 
@@ -224,57 +267,54 @@ function renderSlots() {
     btn.textContent = `${slot.start}-${slot.end}`;
 
     btn.addEventListener("click", async () => {
+      // 1) other people's or past reservations: DO NOTHING
+      if (slot.status === "booked") {
+        return;
+      }
 
-      // BOOKED SLOT CLICK → CANCEL
-  // Cannot cancel other people's reservations
-if (slot.status === "booked") {
-  return; 
-}
+      // 2) my own slot → cancel (only if time not passed)
+      if (slot.status === "mine") {
+        if (isPastSlot(selectedDate, slot.start)) {
+          alert(LANG[currentLang].tooLateCancel);
+          return;
+        }
 
-      // MY OWN SLOT CLICK → CANCEL
-// Cannot cancel other people's reservations
-if (slot.status === "booked") {
-  return; 
-}
+        if (confirm(LANG[currentLang].cancelQuestion)) {
+          const dateKey = getDateKey(selectedDate);
 
-// MY OWN SLOT CLICK → CANCEL
-if (slot.status === "mine") {
-  const ask = LANG[currentLang].cancelQuestion;
+          try {
+            await fetch(`${API_URL}/cancel`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                date: dateKey,
+                start: slot.start,
+                user_id: USER_ID
+              }),
+            });
 
-  if (confirm(ask)) {
-    const dateString = selectedDate.toISOString().split("T")[0];
+            // remove from local "mine" list for this date
+            if (myBookedByDate[dateKey]) {
+              myBookedByDate[dateKey] = myBookedByDate[dateKey].filter(s => s !== slot.start);
+            }
 
-    try {
-      await fetch(`${API_URL}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: dateString,
-          start: slot.start,
-          user_id: USER_ID
-        }),
-      });
+            slots = slots.map(s =>
+              s.start === slot.start ? { ...s, status: "free" } : s
+            );
 
-      slots = slots.map(s =>
-        s.start === slot.start ? { ...s, status: "free" } : s
-      );
+            renderSlots();
+            updateConfirmButtonState();
+            updateStatusText();
+            alert(LANG[currentLang].cancelDone);
 
-      renderSlots();
-      alert(LANG[currentLang].cancelDone);
+          } catch(err) {
+            console.error(err);
+          }
+        }
+        return;
+      }
 
-      confirmBtn.textContent = "Далее / Շարունակել";
-      confirmBtn.disabled = false;
-
-    } catch(err) {
-      console.error(err);
-    }
-  }
-  return;
-}
-
-
-
-      // NEXT-DAY BLOCK
+      // 3) block next day after 22:00 for new booking
       if (isNextDayBlocked(selectedDate)) {
         alert(currentLang === "ru"
           ? "Нельзя бронировать на завтра после 22:00."
@@ -283,10 +323,11 @@ if (slot.status === "mine") {
         return;
       }
 
+      // 4) normal free slot select/deselect
       const updated = toggleSlotSelection(slot);
       slots = slots.map(s => s.start === slot.start ? updated : s);
       renderSlots();
-      renderSummary();
+      updateStatusText();
     });
 
     slotGridEl.appendChild(btn);
@@ -295,55 +336,50 @@ if (slot.status === "mine") {
 
 // ============ INIT DAY SLOTS ============
 async function initSlotsForDay() {
-  const dateString = selectedDate.toISOString().split("T")[0];
+  const dateKey = getDateKey(selectedDate);
   let base = generateSlotsForDay();
 
   const today = new Date();
   const sel = new Date(selectedDate);
 
+  // block past hours for TODAY as non-cancelable booked
   if (isSameDay(today, sel)) {
-    base = base.map(s => isPastSlot(selectedDate, s.start) ? { ...s, status:"booked" } : s);
+    base = base.map(s =>
+      isPastSlot(selectedDate, s.start) ? { ...s, status:"booked" } : s
+    );
   }
 
+  // load booked slots from backend
   try {
-    const res = await fetch(`${API_URL}/slots/${dateString}?user_id=${USER_ID}`);
-const data = await res.json();
+    const res = await fetch(`${API_URL}/slots/${dateKey}`);
+    const data = await res.json();
+    const globalBooked = data.booked || [];
 
-const globalBooked = data.booked || [];
-const personal = data.personal || [];
-
-// Mark globally booked slots (others)
-slots = applyBookedSlots(base, globalBooked);
-
-// Mark user's own slots
-slots = slots.map(s =>
-  personal.includes(s.start)
-    ? { ...s, status: "mine" }
-    : s
-);
-    // Disable NEXT if user already booked 2 slots
-const myCount = slots.filter(s => s.status === "mine").length;
-
-if (myCount >= 2) {
-  confirmBtn.textContent = currentLang === "ru" ? "Спасибо ✔" : "Շնորհակալություն ✔";
-  confirmBtn.disabled = true;
-} else {
-  confirmBtn.textContent = "Далее / Շարունակել";
-  confirmBtn.disabled = false;
-}
-
-
-  } catch {
+    slots = applyBookedSlots(base, globalBooked);
+  } catch (e) {
+    console.error("Error loading booked slots", e);
     slots = base;
   }
 
+  // mark MY own slots for this date (only current session)
+  const myForDay = myBookedByDate[dateKey] || [];
+  if (myForDay.length) {
+    slots = slots.map(s =>
+      myForDay.includes(s.start) && !isPastSlot(selectedDate, s.start)
+        ? { ...s, status: "mine" }
+        : s
+    );
+  }
+
+  updateConfirmButtonState();
+  selectedSlots = [];
   renderSlots();
+  updateStatusText();
 }
 
 // ============ SUMMARY ============
 function renderSummary() {
-  if (!selectedSlots.length) summaryEl.textContent = "";
-  else summaryEl.textContent = selectedSlots.map(s => `${s.start}-${s.end}`).join(", ");
+  updateStatusText();
 }
 
 // ============ CONFIRM → POPUP ============
@@ -371,12 +407,14 @@ popupSubmit.addEventListener("click", async () => {
     return;
   }
 
+  const dateKey = getDateKey(selectedDate);
+
   const reservationData = {
-    date: selectedDate.toISOString().split("T")[0],
+    date: dateKey,
     slots: selectedSlots,
     name: nameInput.value,
     phone: phoneInput.value,
-    user_id: "web-user"
+    user_id: USER_ID
   };
 
   try {
@@ -389,26 +427,24 @@ popupSubmit.addEventListener("click", async () => {
     console.error(e);
   }
 
-  popup.classList.add("hidden");
- const myCount = slots.filter(s => s.status === "mine").length;
-
-if (myCount >= 2) {
-  confirmBtn.textContent = LANG[currentLang].thanks;
-  confirmBtn.disabled = true;
-} else {
-  confirmBtn.textContent = "Далее / Շարունակել";
-  confirmBtn.disabled = false;
-}
-
-
-  selectedSlots.forEach(s => {
-    slots = slots.map(sl => sl.start === s.start ? { ...sl, status:"mine" } : sl);
+  // mark them as "mine" locally
+  if (!myBookedByDate[dateKey]) myBookedByDate[dateKey] = [];
+  selectedSlots.forEach(sel => {
+    if (!myBookedByDate[dateKey].includes(sel.start)) {
+      myBookedByDate[dateKey].push(sel.start);
+    }
+    slots = slots.map(s =>
+      s.start === sel.start ? { ...s, status:"mine" } : s
+    );
   });
 
-  renderSlots();
+  popup.classList.add("hidden");
 
-  summaryEl.textContent = LANG[currentLang].afterBooking;
+  // update button state & status text
+  updateConfirmButtonState();
   selectedSlots = [];
+  renderSlots();
+  updateStatusText();
 });
 
 popupClose.addEventListener("click", () => popup.classList.add("hidden"));
@@ -420,4 +456,3 @@ popupClose.addEventListener("click", () => popup.classList.add("hidden"));
   renderDates();
   initSlotsForDay();
 })();
-
