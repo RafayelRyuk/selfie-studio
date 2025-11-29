@@ -7,8 +7,23 @@ const db = require("./database");
 
 // =============== EXPRESS API ===============
 const app = express();
-app.use(cors());
+
+// CORS configuration - allow all origins (needed for Telegram Web Apps)
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
+
+// Log all incoming requests for debugging
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`, {
+    query: req.query,
+    body: req.body ? Object.keys(req.body) : 'no body'
+  });
+  next();
+});
 
 // Test endpoint to verify database connection
 app.get("/test-db", (req, res) => {
@@ -177,12 +192,7 @@ app.post("/reserve", (req, res) => {
   });
 });
 
-// Listen on all interfaces (0.0.0.0) to accept connections from ngrok/tunnels
-app.listen(3000, "0.0.0.0", () => {
-  console.log("API running on port 3000");
-  console.log("Local: http://localhost:3000");
-  console.log("Ready for ngrok tunnel or external connections");
-});
+app.listen(3000, () => console.log("API running on port 3000"));
 
 // =============== TELEGRAM BOT ===============
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -206,7 +216,8 @@ bot.command("book", (ctx) => {
           [
             {
               text: "Открыть календарь 📸 / Բացել օրացույցը",
-              web_app: { url: "https://rafayelryuk.github.io/selfie-studio/" }
+              web_app: { url: `${API_URL}/webapp` }
+
             }
           ]
         ]
