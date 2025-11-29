@@ -15,13 +15,96 @@ const myBookedByDate = {}; // { "2025-03-01": ["10:00","10:30"] }
 
 // Telegram user ID (for backend, future)
 let USER_ID = "web-user";
-if (window.Telegram && Telegram.WebApp) {
+const isTelegram = window.Telegram && Telegram.WebApp;
+if (isTelegram) {
   Telegram.WebApp.ready();
   USER_ID = Telegram.WebApp.initDataUnsafe?.user?.id || "web-user";
+  console.log("📱 Telegram Web App detected, User ID:", USER_ID);
 }
 
 // ======= BACKEND API URL ========
-const API_URL = "http://localhost:3000";
+// For Telegram Web App to work, you need to expose your localhost backend
+// Option 1: Use ngrok (recommended for testing)
+//   1. Install ngrok: https://ngrok.com/download
+//   2. Run: ngrok http 3000
+//   3. Copy the HTTPS URL (e.g., https://abc123.ngrok.io)
+//   4. Paste it below as PRODUCTION_API_URL
+//
+// Option 2: Deploy to a cloud service (Heroku, Railway, Render, etc.)
+//
+// Option 3: Use your PC's public IP with port forwarding (advanced)
+
+// ⚠️ REPLACE THIS with your ngrok URL or deployed backend URL
+// Example: "https://abc123.ngrok.io" or "https://your-app.herokuapp.com"
+const API_URL = "https://unsponged-roseann-slackly.ngrok-free.dev";
+
+// Log API URL for debugging (check browser console)
+console.log("🔗 API URL:", API_URL, "| Telegram:", isTelegram);
+
+// Helper function to make API calls with ngrok bypass headers
+async function apiFetch(url, options = {}) {
+  // Build headers - ensure ngrok-skip-browser-warning is always included
+  const headers = {
+    'ngrok-skip-browser-warning': 'true', // Bypass ngrok warning page - MUST be first
+    ...(options.headers || {})
+  };
+  
+  // Add Content-Type if not present and we have a body
+  if (options.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+  
+  const defaultOptions = {
+    ...options,
+    headers: headers,
+    mode: 'cors', // Ensure CORS is enabled
+    credentials: 'omit' // Don't send cookies
+  };
+  
+  console.log("🌐 apiFetch:", url, "Headers:", Object.keys(headers));
+  
+  try {
+    const response = await fetch(url, defaultOptions);
+    
+    // Check if we got the ngrok warning page (HTML response instead of JSON)
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('text/html') && !contentType.includes('application/json')) {
+      const text = await response.text();
+      if (text.includes('ngrok') || text.includes('Visit Site')) {
+        throw new Error('ngrok warning page detected - requests are being blocked');
+      }
+    }
+    
+    return response;
+  } catch (error) {
+    console.error("❌ Fetch error:", error);
+    if (isTelegram && error.message.includes('ngrok warning page')) {
+      console.error("🔴 CRITICAL: ngrok warning page is blocking requests!");
+      console.error("💡 Solution: Run ngrok with: ngrok http 3000 --host-header=rewrite");
+    }
+    throw error;
+  }
+}
+
+// Test API connection on load
+(async () => {
+  try {
+    const testResponse = await apiFetch(`${API_URL}/test-db`);
+    const testData = await testResponse.json();
+    console.log("✅ Backend connection test:", testData);
+  } catch (error) {
+    console.error("❌ Backend connection failed:", error);
+    if (isTelegram) {
+      console.error("⚠️ Telegram Web App cannot connect to backend!");
+      console.error("💡 Possible issues:");
+      console.error("   1. ngrok warning page blocking (free tier)");
+      console.error("   2. Backend not running");
+      console.error("   3. ngrok tunnel not active");
+      console.error("   4. Try: ngrok http 3000 --host-header=rewrite");
+    }
+  }
+})();
+
 
 // ======= UI ELEMENTS ========
 const dateListEl   = document.getElementById("date-list");
@@ -283,7 +366,7 @@ function renderSlots() {
           const dateKey = getDateKey(selectedDate);
 
           try {
-            await fetch(`${API_URL}/cancel`, {
+            await apiFetch(`${API_URL}/cancel`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -354,14 +437,27 @@ async function initSlotsForDay() {
   let personalBooked = [];
 
   try {
-    const res = await fetch(`${API_URL}/slots/${dateKey}?user_id=${USER_ID}`);
+    console.log("📡 Loading slots for date:", dateKey, "User:", USER_ID);
+    const res = await apiFetch(`${API_URL}/slots/${dateKey}?user_id=${USER_ID}`);
+    
+    if (!res.ok) {
+      console.error("❌ Failed to load slots:", res.status, res.statusText);
+      return;
+    }
+    
     const data = await res.json();
+    console.log("📥 Loaded slots data:", data);
 
     globalBooked = data.booked || [];    // others' bookings
     personalBooked = data.personal || []; // my own slots from DB
+    
+    console.log("✅ Loaded:", globalBooked.length, "global bookings,", personalBooked.length, "personal bookings");
 
   } catch (e) {
-    console.error("Error loading booked slots", e);
+    console.error("❌ Error loading booked slots:", e);
+    if (isTelegram) {
+      console.error("⚠️ Telegram Web App cannot fetch slots from backend!");
+    }
   }
 
   // 2) FIRST apply global bookings
@@ -431,14 +527,82 @@ popupSubmit.addEventListener("click", async () => {
     user_id: USER_ID
   };
 
+  console.log("📤 Sending reservation request to:", `${API_URL}/reserve`);
+  console.log("📦 Reservation data:", reservationData);
+  console.log("🌐 Is Telegram:", isTelegram, "| User ID:", USER_ID);
+  
+  // Show loading indicator in Telegram
+  if (isTelegram && Telegram.WebApp) {
+    Telegram.WebApp.showAlert("Sending reservation...");
+  }
+  
   try {
-    await fetch(`${API_URL}/reserve`, {
+    console.log("🔄 Calling apiFetch...");
+    const response = await apiFetch(`${API_URL}/reserve`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(reservationData),
     });
+    
+    console.log("📥 Response received! Status:", response.status, response.statusText);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("❌ Server error response:", errorText);
+      try {
+        const errorJson = JSON.parse(errorText);
+        console.error("❌ Error details:", errorJson);
+        alert(`Failed to save reservation: ${errorJson.error || "Server error"}`);
+      } catch {
+        alert(`Failed to save reservation: ${response.status} ${response.statusText}`);
+      }
+      return;
+    }
+    
+    const result = await response.json();
+    console.log("✅ Reservation response:", result);
+    
+    if (!result.success) {
+      console.error("❌ Reservation failed:", result.error || "Unknown error");
+      alert(`Failed to save reservation: ${result.error || "Unknown error"}`);
+      return;
+    }
+    
+    console.log("✅ Reservation saved successfully!");
   } catch (e) {
-    console.error(e);
+    console.error("❌ Network error saving reservation:", e);
+    console.error("❌ Error details:", {
+      message: e.message,
+      stack: e.stack,
+      name: e.name,
+      API_URL: API_URL,
+      isTelegram: isTelegram
+    });
+    
+    // Try to get more details about the error
+    if (e.message) {
+      console.error("❌ Error message:", e.message);
+    }
+    if (e.cause) {
+      console.error("❌ Error cause:", e.cause);
+    }
+    
+    let errorMsg = "Error connecting to server.\n\n";
+    errorMsg += `API URL: ${API_URL}\n`;
+    errorMsg += `Error: ${e.message || "Unknown error"}\n\n`;
+    
+    if (isTelegram) {
+      errorMsg += "Possible issues:\n";
+      errorMsg += "• ngrok warning page blocking\n";
+      errorMsg += "• Backend not running\n";
+      errorMsg += "• Wrong API URL\n";
+      errorMsg += "• Check backend console for requests";
+      
+      if (Telegram.WebApp) {
+        Telegram.WebApp.showAlert(errorMsg);
+      }
+    }
+    alert(errorMsg);
+    return;
   }
 
   // mark them as "mine" locally
