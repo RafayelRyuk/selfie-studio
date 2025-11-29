@@ -90,12 +90,69 @@ app.get("/slots/:date", (req, res) => {
 app.post("/cancel", (req, res) => {
   const { date, start, user_id } = req.body;
 
-  db.run(
-    "DELETE FROM reservations WHERE date = ? AND start = ? AND user_id = ?",
-    [date, start, user_id],
-    function (err) {
-      if (err) return res.json({ success: false });
-      res.json({ success: true });
+  console.log("Cancel request:", { date, start, user_id });
+
+  // Validate input
+  if (!date || !start || !user_id) {
+    console.error("Missing required fields for cancel:", { date, start, user_id });
+    return res.status(400).json({ success: false, error: "Missing required fields" });
+  }
+
+  // First, verify the reservation exists and belongs to this user
+  db.get(
+    "SELECT id, user_id FROM reservations WHERE date = ? AND start = ?",
+    [date, start],
+    function (err, row) {
+      if (err) {
+        console.error("Database error checking reservation:", err);
+        return res.status(500).json({ success: false, error: "Database error" });
+      }
+
+      // Reservation doesn't exist
+      if (!row) {
+        console.warn("Cancel attempt: Reservation not found", { date, start });
+        return res.status(404).json({ success: false, error: "Reservation not found" });
+      }
+
+      // Check if the reservation belongs to the requesting user
+      // Convert both to strings for comparison (user_id might be number or string)
+      const requestingUserId = String(user_id);
+      const ownerUserId = String(row.user_id);
+      
+      if (ownerUserId !== requestingUserId) {
+        console.warn("Cancel attempt: Unauthorized", {
+          requested_by: requestingUserId,
+          actual_owner: ownerUserId,
+          date,
+          start,
+          types: {
+            requested_type: typeof user_id,
+            owner_type: typeof row.user_id
+          }
+        });
+        return res.status(403).json({ success: false, error: "You can only cancel your own reservations" });
+      }
+      
+      console.log("✅ Authorization check passed:", {
+        user_id: requestingUserId,
+        date,
+        start
+      });
+
+      // Reservation exists and belongs to user - proceed with deletion
+      db.run(
+        "DELETE FROM reservations WHERE date = ? AND start = ? AND user_id = ?",
+        [date, start, user_id],
+        function (deleteErr) {
+          if (deleteErr) {
+            console.error("Database error deleting reservation:", deleteErr);
+            return res.status(500).json({ success: false, error: "Failed to delete reservation" });
+          }
+          
+          console.log("Reservation cancelled successfully:", { date, start, user_id });
+          res.json({ success: true });
+        }
+      );
     }
   );
 });

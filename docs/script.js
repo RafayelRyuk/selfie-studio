@@ -12,6 +12,7 @@ let slots = [];           // all slots of selected day
 
 // Track MY own bookings during current session (per date)
 const myBookedByDate = {}; // { "2025-03-01": ["10:00","10:30"] }
+let personalBookedByDate = {}; // Track personal bookings from DB per date
 
 // Telegram user ID (for backend, future)
 let USER_ID = "web-user";
@@ -36,7 +37,7 @@ if (isTelegram) {
 
 // ⚠️ REPLACE THIS with your ngrok URL or deployed backend URL
 // Example: "https://abc123.ngrok.io" or "https://your-app.herokuapp.com"
-const API_URL = "https://unsponged-roseann-slackly.ngrok-free.dev";
+const API_URL = " https://unsponged-roseann-slackly.ngrok-free.dev";
 
 // Log API URL for debugging (check browser console)
 console.log("🔗 API URL:", API_URL, "| Telegram:", isTelegram);
@@ -356,7 +357,24 @@ function renderSlots() {
       }
 
       // 2) my own slot → cancel (only if time not passed)
+      // SECURITY: Double-check this is actually my slot before allowing cancel
       if (slot.status === "mine") {
+        const dateKey = getDateKey(selectedDate);
+        
+        // Additional security check: verify this slot is in my personal bookings from DB
+        const personalBooked = personalBookedByDate[dateKey] || [];
+        const isActuallyMine = personalBooked.includes(slot.start);
+        
+        if (!isActuallyMine) {
+          console.error("🚨 SECURITY: Attempt to cancel slot not in personal bookings!", {
+            slot: slot.start,
+            date: dateKey,
+            personalBooked: personalBooked,
+            user_id: USER_ID
+          });
+          alert("Error: This slot doesn't belong to you.");
+          return;
+        }
         if (isPastSlot(selectedDate, slot.start)) {
           alert(LANG[currentLang].tooLateCancel);
           return;
@@ -366,15 +384,31 @@ function renderSlots() {
           const dateKey = getDateKey(selectedDate);
 
           try {
-            await apiFetch(`${API_URL}/cancel`, {
+            const cancelResponse = await apiFetch(`${API_URL}/cancel`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 date: dateKey,
                 start: slot.start,
                 user_id: USER_ID
               }),
             });
+
+            if (!cancelResponse.ok) {
+              const errorData = await cancelResponse.json();
+              console.error("❌ Cancel failed:", errorData);
+              alert(errorData.error || "Failed to cancel reservation");
+              return;
+            }
+
+            const result = await cancelResponse.json();
+            
+            if (!result.success) {
+              console.error("❌ Cancel failed:", result.error);
+              alert(result.error || "Failed to cancel reservation");
+              return;
+            }
+
+            console.log("✅ Reservation cancelled successfully");
 
             // remove from local "mine" list for this date
             if (myBookedByDate[dateKey]) {
@@ -391,7 +425,8 @@ function renderSlots() {
             alert(LANG[currentLang].cancelDone);
 
           } catch(err) {
-            console.error(err);
+            console.error("❌ Error cancelling reservation:", err);
+            alert("Error cancelling reservation. Please try again.");
           }
         }
         return;
@@ -449,7 +484,10 @@ async function initSlotsForDay() {
     console.log("📥 Loaded slots data:", data);
 
     globalBooked = data.booked || [];    // others' bookings
-    personalBooked = data.personal || []; // my own slots from DB
+    const personalBooked = data.personal || []; // my own slots from DB
+    
+    // Store personal bookings by date for security checks
+    personalBookedByDate[dateKey] = personalBooked;
     
     console.log("✅ Loaded:", globalBooked.length, "global bookings,", personalBooked.length, "personal bookings");
 
