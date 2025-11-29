@@ -12,8 +12,16 @@ const app = express();
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'ngrok-skip-browser-warning'   // 👈 add this
+  ]
 }));
+
+// also handle preflight cleanly
+app.options('*', cors());
+
 app.use(express.json());
 
 // Log all incoming requests for debugging
@@ -221,7 +229,7 @@ bot.command("book", (ctx) => {
           [
             {
               text: "Открыть календарь 📸 / Բացել օրացույցը",
-              web_app: { url: `${API_URL}/webapp` }
+              web_app: { url: `${https://rafayelryuk.github.io/selfie-studio/}/webapp` }
 
             }
           ]
